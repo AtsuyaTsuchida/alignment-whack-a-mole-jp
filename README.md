@@ -1,7 +1,5 @@
 # Japanese Memorization Probe — Alignment Whack-a-Mole 日本語版
 
-Fine-Tuning による verbatim recall（一字一句の再現）の活性化を日本語文学で測定する。
-
 ---
 
 ## 1. セットアップ
