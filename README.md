@@ -1,7 +1,6 @@
 # Japanese Memorization Probe — Alignment Whack-a-Mole 日本語版
 
-[Liu et al. 2026 "Alignment Whack-a-Mole"](https://arxiv.org/abs/2603.20957) の手法を
-日本語文学に適用し、Fine-Tuning による verbatim recall（一字一句の再現）の活性化を測定する。
+Fine-Tuning による verbatim recall（一字一句の再現）の活性化を日本語文学で測定する。
 
 ---
 
@@ -10,8 +9,8 @@
 ### 1.1 リポジトリを clone
 
 ```bash
-git clone https://github.com/AtsuyaTsuchida/alignment-whack-a-mole-jp.git
-cd alignment-whack-a-mole-jp
+git clone https://github.com/YOUR_ORG/THIS_REPO.git
+cd THIS_REPO
 ```
 
 ### 1.2 Python 仮想環境
@@ -37,7 +36,6 @@ python -c "from openai import OpenAI; print(OpenAI().models.list().data[0])"
 ### 1.4 テキストデータ
 
 `data/japanese/{author}/raw/` 配下に青空文庫からダウンロードした UTF-8 `.txt` を配置。
-漱石・芥川・太宰・宮沢・鷗外の主要作品は本リポジトリに同梱（パブリックドメイン）。
 
 ---
 
@@ -92,7 +90,7 @@ python preprocess/jp_preprocess.py \
 
 - **所要時間**: 1 作品あたり 5〜15 分（GPT-4o 同期 API 呼び出し）
 - **コスト**: 1 作品あたり ~$0.3
-- **あらすじスタイル**: 論文準拠の plot summary（登場人物・視点・出来事の順序を維持）
+- **あらすじスタイル**: plot summary（登場人物・視点・出来事の順序を維持）
 
 ### Step 1.5. FT 訓練データ統合
 
@@ -154,24 +152,12 @@ preprocess/jp_preprocess.py         # Step 1: チャンク分割 + あらすじ�
 finetuning/jp_generate.py           # Step 2: FT モデルで 10× 生成
 evaluation/jp_memorization_eval.py  # Step 3: BMC@k 評価
 scripts/merge_chunks_to_train.py    # Step 1.5: FT 訓練データ統合
-data/japanese/{author}/raw/         # 青空文庫テキスト（PD）
+data/japanese/{author}/raw/         # 青空文庫テキスト
 ```
 
 ---
 
-## 5. 論文との差分
-
-| 項目 | 論文 | 本実装 | 備考 |
-|---|---|---|---|
-| 単位 | word | char | 日本語適応 |
-| 生成数 | 100/excerpt | 10/excerpt | コスト削減 |
-| k 値 | BMC@5 | BMC@10 | char 単位で厳格化 |
-
-機構（mechanism）レベルでは論文準拠。論文同等の精度を求める場合は `--num_generations 100` を指定。
-
----
-
-## 6. トラブルシューティング
+## 5. トラブルシューティング
 
 | 症状 | 原因 | 対処 |
 |---|---|---|
