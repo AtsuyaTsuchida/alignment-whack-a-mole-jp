@@ -1,0 +1,70 @@
+# API keys & secrets
+.env
+.env.*
+*.pem
+*.key
+secrets/
+
+# 著作権あり作品（kudan: 九段理江 — 公開不可）
+data/japanese/kudan/raw/
+data/japanese/kudan/chunks/影の雨*
+data/japanese/kudan/chunks/東京都同情塔*
+data/japanese/kudan/results/影の雨*
+data/japanese/kudan/results/東京都同情塔*
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+.python-version
+
+# macOS
+.DS_Store
+
+# Editor
+.vscode/
+.idea/
+*.swp
+
+# Logs
+*.log
+
+# 中間生成物（Step 1/2/3 で再生成可能）
+data/japanese/*/chunks/
+data/japanese/*/soseki_train_*.json
+data/japanese/kudan/
+data/japanese/results/
+data/japanese/text_exports/
+
+# 元論文のサンプル（不要）
+data/example_*.json
+
+# 個人 FT 履歴
+fine_tune_jobs.csv
+
+# 旧フォルダ・スクリプト
+夏目漱石/
+analysis/
+build_visualization.py
+export_text_pairs.py
+export_with_chunks.py
+make_detail_report.py
+load_key.py
+load_key.sh
+register_key.sh
+
+# Zip・PDF
+*.zip
+*.pdf
+
+# 元論文の英語版スクリプト（本リポジトリは日本語版に特化のため除外）
+preprocess/epub2txt.py
+preprocess/fix_file.py
+preprocess/split.py
+finetuning/deepseek_*.py
+finetuning/gemini_*.py
+finetuning/gpt_finetune.py
+finetuning/gpt_generate.py
+evaluation/memorization_eval_metrics.py
