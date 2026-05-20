@@ -102,15 +102,27 @@ python scripts/merge_chunks_to_train.py \
 
 `--exclude` で held-out 作品を訓練データから除外。
 
-### Step 1.6. OpenAI Fine-tuning
+### Step 1.6. JSONL 変換
 
-`soseki_train_3000.json` を OpenAI Dashboard の Fine-tuning ページから投入:
+OpenAI Fine-tuning API は chat 形式の JSONL を要求するので、専用スクリプトで変換:
 
-1. JSONL 変換: `{"messages": [{"role": "user", "content": instruction}, {"role": "assistant", "content": excerpt_text}]}` 形式に変換
-2. Base model: `gpt-4o-2024-08-06`
-3. Suffix: 任意（例 `soseki-jp-3000-ft`）
-4. 投入 → トレーニング完了まで 1〜2 時間
-5. 完成 → モデル ID（例 `ft:gpt-4o-2024-08-06:personal:soseki-jp-3000-ft:XXX`）を取得
+```bash
+python scripts/json_to_jsonl.py \
+  --input data/japanese/soseki/soseki_train_3000.json \
+  --output data/japanese/soseki/soseki_train.jsonl
+```
+
+各例は `system × 2 + user (instruction) + assistant (excerpt)` の構造になる。
+system message は推論時の `finetuning/jp_generate.py` と一致させてある（訓練と推論の prompt 分布を揃えるため）。
+
+### Step 1.7. OpenAI Fine-tuning
+
+OpenAI Dashboard の Fine-tuning ページから `soseki_train.jsonl` を投入:
+
+1. Base model: `gpt-4o-2024-08-06`
+2. Suffix: 任意（例 `soseki-jp-3000-ft`）
+3. 投入 → トレーニング完了まで 1〜2 時間
+4. 完成 → モデル ID（例 `ft:gpt-4o-2024-08-06:personal:soseki-jp-3000-ft:XXX`）を取得
 
 **コスト**: $15〜25（3000 例の場合）
 
@@ -147,9 +159,10 @@ python evaluation/jp_memorization_eval.py \
 
 ```
 preprocess/jp_preprocess.py         # Step 1: チャンク分割 + あらすじ生成
+scripts/merge_chunks_to_train.py    # Step 1.5: chunks 統合
+scripts/json_to_jsonl.py            # Step 1.6: OpenAI FT 用 JSONL 変換
 finetuning/jp_generate.py           # Step 2: FT モデルで 10× 生成
 evaluation/jp_memorization_eval.py  # Step 3: BMC@k 評価
-scripts/merge_chunks_to_train.py    # Step 1.5: FT 訓練データ統合
 data/japanese/{author}/raw/         # 青空文庫テキスト
 ```
 
