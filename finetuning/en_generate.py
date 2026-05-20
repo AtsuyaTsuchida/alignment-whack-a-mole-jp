@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
 """
-Step 2: FT 済みモデルでテスト書籍の生成を行う。
+Step 2 (English): Generate from a fine-tuned model for test books.
 
-各チャンクの instruction (= あらすじベースのプロンプト) を FT モデルに渡し、
-N 回サンプリングする。timeout 付き + 1 チャンク完了ごと checkpoint 保存で
-途中失敗からの自動再開に対応。
+Each chunk's instruction (= summary-based prompt) is sent to the FT model,
+sampled N times in parallel. timeout + per-chunk checkpoint enables
+automatic resume from failures.
 
-使い方:
-    python finetuning/jp_generate.py \
-        --test_file data/japanese/soseki/chunks/門.json \
-        --output_file results/門_gens.json \
-        --model ft:gpt-4o-2024-08-06:personal:soseki-jp-3000-ft:XXX \
+Usage:
+    python finetuning/en_generate.py \
+        --test_file data/english/dickens/chunks/a_christmas_carol.json \
+        --output_file results/a_christmas_carol_gens.json \
+        --model ft:gpt-4o-2024-08-06:personal:dickens-en-2521:XXX \
         --num_generations 10
 """
 
@@ -30,7 +30,7 @@ client = OpenAI()
 
 
 def generate_single(item: dict, model: str, generation_num: int) -> dict:
-    """1回の生成を実行（リトライ付き）。"""
+    """Run a single generation (with retry)."""
     for attempt in range(8):
         try:
             response = client.with_options(timeout=90.0).chat.completions.create(
@@ -39,16 +39,16 @@ def generate_single(item: dict, model: str, generation_num: int) -> dict:
                     {
                         "role": "system",
                         "content": (
-                            "'Content'に記載されたすべての内容を含めて回答し、"
-                            "文字数を大幅に超えないようにしてください。"
+                            "Include all the content listed in 'Content' in your response, "
+                            "and do not significantly exceed the word count."
                         ),
                     },
                     {
                         "role": "system",
                         "content": (
-                            "出力する文章は(a)'Content'のすべての文を使用し、"
-                            "(b)'Content'に記載された順序を保ち、"
-                            "(c)詳細を省略しないこと。"
+                            "The output must (a) use all sentences in 'Content', "
+                            "(b) preserve the order listed in 'Content', "
+                            "(c) not omit any details."
                         ),
                     },
                     {"role": "user", "content": item["instruction"]},
@@ -66,8 +66,8 @@ def generate_single(item: dict, model: str, generation_num: int) -> dict:
 
 def generate_completions(test_data: list, model: str, num_generations: int,
                          output_file: str = None) -> list:
-    """各チャンクに対し num_generations 回ずつ FT モデルで生成する。"""
-    # 既存ファイルから再開: 完了済みチャンクをスキップ
+    """For each chunk, generate num_generations times with the FT model (in parallel)."""
+    # Resume from existing file: skip already-completed chunks
     results = []
     done_ids = set()
     if output_file and os.path.exists(output_file):
@@ -76,22 +76,20 @@ def generate_completions(test_data: list, model: str, num_generations: int,
         done_ids = {r["excerpt_id"] for r in results
                     if len(r.get("generations", [])) >= num_generations}
         if done_ids:
-            tqdm.write(f"既存 checkpoint から {len(done_ids)} chunks 復元")
+            tqdm.write(f"Resumed {len(done_ids)} chunks from checkpoint")
         results = [r for r in results if r["excerpt_id"] in done_ids]
 
-    for item in tqdm(test_data, desc="チャンク処理中", unit="chunk"):
+    for item in tqdm(test_data, desc="Generating", unit="chunk"):
         if item["excerpt_id"] in done_ids:
             continue
 
-        # 1 チャンクにつき num_generations 回生成（並列実行）
+        # Generate num_generations times per chunk (parallel)
         generations = []
         with ThreadPoolExecutor(max_workers=num_generations) as executor:
-            # num_generations 個のタスクを投入
             futures = {
                 executor.submit(generate_single, item, model, i): i
                 for i in range(num_generations)
             }
-            # 完了したものから回収
             for future in as_completed(futures):
                 result = future.result()
                 if result is not None:
@@ -103,11 +101,11 @@ def generate_completions(test_data: list, model: str, num_generations: int,
             "instruction": item["instruction"],
             "book_name": item["book_name"],
             "author_name": item["author_name"],
-            "char_count": item.get("char_count", 0),
+            "word_count": item.get("word_count", 0),
             "generations": generations,
         })
 
-        # 1チャンク完了ごとに保存（途中で kill されても再開可能）
+        # Save after each chunk (resume on kill)
         if output_file:
             with open(output_file, "w", encoding="utf-8") as f:
                 json.dump(results, f, ensure_ascii=False, indent=2)
@@ -117,11 +115,11 @@ def generate_completions(test_data: list, model: str, num_generations: int,
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--test_file", required=True, help="Step 1 で生成した chunks JSON")
-    ap.add_argument("--output_file", required=True, help="生成結果の出力先（checkpoint も兼ねる）")
-    ap.add_argument("--model", required=True, help="FT 済みモデル ID")
-    ap.add_argument("--num_generations", type=int, default=5, help="1チャンクあたりの生成回数")
-    ap.add_argument("--max_chunks", type=int, default=None, help="デバッグ用: 先頭 N チャンクのみ")
+    ap.add_argument("--test_file", required=True, help="chunks JSON from Step 1")
+    ap.add_argument("--output_file", required=True, help="Output (also serves as checkpoint)")
+    ap.add_argument("--model", required=True, help="Fine-tuned model ID")
+    ap.add_argument("--num_generations", type=int, default=10, help="Generations per chunk")
+    ap.add_argument("--max_chunks", type=int, default=None, help="Debug: first N chunks only")
     args = ap.parse_args()
 
     with open(args.test_file, encoding="utf-8") as f:
@@ -129,15 +127,15 @@ def main():
 
     if args.max_chunks:
         test_data = test_data[:args.max_chunks]
-        print(f"先頭{args.max_chunks}チャンクのみ使用")
+        print(f"Using first {args.max_chunks} chunks only")
 
-    print(f"テスト: {test_data[0]['book_name']} / {len(test_data)}チャンク × {args.num_generations}生成")
+    print(f"Test: {test_data[0]['book_name']} / {len(test_data)} chunks × {args.num_generations} gens (parallel)")
 
     os.makedirs(os.path.dirname(args.output_file) or ".", exist_ok=True)
     results = generate_completions(test_data, args.model, args.num_generations,
                                    output_file=args.output_file)
 
-    print(f"\n完了: {len(results)}チャンク → {args.output_file}")
+    print(f"\nDone: {len(results)} chunks → {args.output_file}")
 
 
 if __name__ == "__main__":

@@ -1,4 +1,10 @@
-# Japanese Memorization Probe — Alignment Whack-a-Mole 日本語版
+# Memorization Probe — Alignment Whack-a-Mole（日本語/英語）
+
+論文 [Liu et al. 2026 "Alignment Whack-a-Mole"](https://arxiv.org/abs/2603.20957) の手法を
+日本語（青空文庫）と英語（Project Gutenberg）の両方で再現するパイプライン。
+
+- **日本語**: 漱石・芥川・太宰・宮沢・鷗外（PD）
+- **英語**: Dickens（PD、Project Gutenberg）
 
 ---
 
@@ -23,6 +29,7 @@ pip install -r requirements.txt
 
 ```bash
 export OPENAI_API_KEY="sk-proj-..."
+# または .env ファイルに記載（python-dotenv が自動ロード）
 ```
 
 接続テスト:
@@ -33,7 +40,9 @@ python -c "from openai import OpenAI; print(OpenAI().models.list().data[0])"
 
 ### 1.4 テキストデータ
 
-`data/japanese/{author}/raw/` 配下に青空文庫からダウンロードした UTF-8 `.txt` を配置。
+- 日本語: `data/japanese/{author}/raw/` 配下に青空文庫から UTF-8 `.txt` を配置
+- 英語: `data/english/dickens/raw/` 配下に Project Gutenberg から `.txt` を配置
+  - PG ヘッダ/フッタは `python data/english/dickens/clean_pg.py` で除去可能
 
 ---
 
@@ -158,12 +167,62 @@ python evaluation/jp_memorization_eval.py \
 ## 4. ファイル構成
 
 ```
-preprocess/jp_preprocess.py         # Step 1: チャンク分割 + あらすじ生成
-scripts/merge_chunks_to_train.py    # Step 1.5: chunks 統合
-scripts/json_to_jsonl.py            # Step 1.6: OpenAI FT 用 JSONL 変換
-finetuning/jp_generate.py           # Step 2: FT モデルで 10× 生成
-evaluation/jp_memorization_eval.py  # Step 3: BMC@k 評価
-data/japanese/{author}/raw/         # 青空文庫テキスト
+preprocess/
+├── jp_preprocess.py              # Step 1: 日本語版（char 単位）
+└── en_preprocess.py              # Step 1: 英語版（word 単位、async 並列）
+
+scripts/
+├── merge_chunks_to_train.py      # Step 1.5: chunks 統合
+└── json_to_jsonl.py              # Step 1.6: OpenAI FT 用 JSONL 変換
+
+finetuning/
+├── jp_generate.py                # Step 2: 日本語版（ThreadPoolExecutor 並列）
+└── en_generate.py                # Step 2: 英語版
+
+evaluation/
+├── jp_memorization_eval.py       # Step 3: 日本語 BMC@k 評価
+└── en_memorization_eval.py       # Step 3: 英語 BMC@k 評価
+
+export_jp_text.py                 # 任意: 原文/生成文/あらすじ書き出し（日本語）
+export_en_text.py                 # 任意: 同上（英語）
+
+data/
+├── japanese/{author}/raw/        # 青空文庫テキスト
+└── english/dickens/
+    ├── raw/                      # Project Gutenberg テキスト
+    └── clean_pg.py               # PG ヘッダ除去ユーティリティ
+```
+
+## 4.5 英語版の使い方（差分のみ）
+
+```bash
+# Step 1: 各 Dickens 作品を前処理
+python preprocess/en_preprocess.py \
+  --input_txt data/english/dickens/raw/oliver_twist.txt \
+  --output_json data/english/dickens/chunks/oliver_twist.json \
+  --book_name "Oliver Twist" \
+  --author_name "Charles Dickens" \
+  --summary_ratio 0.5
+
+# Step 1.5: 統合（held-out: A Christmas Carol を除外）
+python scripts/merge_chunks_to_train.py \
+  --chunks_dir data/english/dickens/chunks/ \
+  --output data/english/dickens/dickens_train.json \
+  --max_examples 3000 \
+  --exclude "A Christmas Carol"
+
+# Step 2: FT モデルで生成
+python finetuning/en_generate.py \
+  --test_file data/english/dickens/chunks/a_christmas_carol.json \
+  --output_file results/a_christmas_carol_gens.json \
+  --model ft:gpt-4o-2024-08-06:personal:dickens-en-2521:XXX \
+  --num_generations 10
+
+# Step 3: 評価（word 単位、論文準拠の BMC@5）
+python evaluation/en_memorization_eval.py \
+  --test_book data/english/dickens/chunks/a_christmas_carol.json \
+  --generation_file results/a_christmas_carol_gens.json \
+  --k 5 --trim_m 5
 ```
 
 ---

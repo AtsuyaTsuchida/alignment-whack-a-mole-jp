@@ -37,6 +37,11 @@ data/japanese/*/soseki_train_*.json
 data/japanese/kudan/
 data/japanese/results/
 data/japanese/text_exports/
+data/english/dickens/chunks/
+data/english/dickens/dickens_train_*.json
+data/english/dickens/dickens_train.jsonl
+data/english/results/
+data/english/text_exports/
 
 # 元論文のサンプル（不要）
 data/example_*.json
@@ -48,6 +53,7 @@ fine_tune_jobs.csv
 夏目漱石/
 analysis/
 build_visualization.py
+build_en_visualization.py
 export_text_pairs.py
 export_with_chunks.py
 make_detail_report.py
