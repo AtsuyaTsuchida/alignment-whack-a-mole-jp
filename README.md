@@ -183,8 +183,8 @@ evaluation/
 ├── jp_memorization_eval.py       # Step 3: 日本語 BMC@k 評価
 └── en_memorization_eval.py       # Step 3: 英語 BMC@k 評価
 
-export_jp_text.py                 # 任意: 原文/生成文/あらすじ書き出し（日本語）
-export_en_text.py                 # 任意: 同上（英語）
+export_jp_text.py                 # 任意: 原文/生成文/あらすじ書き出し（日本語、§5 参照）
+export_en_text.py                 # 任意: 同上（英語、§5 参照）
 
 data/
 ├── japanese/{author}/raw/        # 青空文庫テキスト
@@ -227,7 +227,36 @@ python evaluation/en_memorization_eval.py \
 
 ---
 
-## 5. トラブルシューティング
+## 5. テキストダンプ（任意）
+
+評価とは別に、人間可読な原文・生成文・あらすじを txt として書き出すユーティリティ。
+各チャンクで **best-of-10**（原文と最も一致した生成）を選択し、チャンク順に連結。
+
+### 日本語
+
+```bash
+python export_jp_text.py \
+  --chunks data/japanese/akutagawa/chunks/羅生門.json \
+  --gens results/羅生門_gens.json \
+  --output_dir data/japanese/text_exports \
+  --name 羅生門
+# → 羅生門_原文.txt / 羅生門_生成文.txt / 羅生門_あらすじ.txt
+```
+
+### 英語
+
+```bash
+python export_en_text.py \
+  --chunks data/english/dickens/chunks/a_christmas_carol.json \
+  --gens results/a_christmas_carol_gens.json \
+  --output_dir data/english/text_exports \
+  --name a_christmas_carol
+# → a_christmas_carol_original.txt / _generated.txt / _summary.txt
+```
+
+---
+
+## 6. トラブルシューティング
 
 | 症状 | 原因 | 対処 |
 |---|---|---|
