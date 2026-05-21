@@ -52,8 +52,6 @@ fine_tune_jobs.csv
 # 旧フォルダ・スクリプト
 夏目漱石/
 analysis/
-build_visualization.py
-build_en_visualization.py
 export_text_pairs.py
 export_with_chunks.py
 make_detail_report.py

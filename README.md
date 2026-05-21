@@ -185,6 +185,8 @@ evaluation/
 
 export_jp_text.py                 # 任意: 原文/生成文/あらすじ書き出し（日本語、§5 参照）
 export_en_text.py                 # 任意: 同上（英語、§5 参照）
+build_visualization.py            # 任意: 縦書き可視化 HTML（日本語、§6 参照）
+build_en_visualization.py         # 任意: 横書き可視化 HTML（英語、§6 参照）
 
 data/
 ├── japanese/{author}/raw/        # 青空文庫テキスト
@@ -256,7 +258,41 @@ python export_en_text.py \
 
 ---
 
-## 6. トラブルシューティング
+## 6. 可視化 HTML（任意）
+
+原文と生成文を 2 カラムで並べ、K 文字/word 以上の連続一致をハイライトする
+単独 HTML を生成。各チャンクで best-of-10 を選択して連結し、一致区間は build 時に
+計算してテンプレに焼き付ける。
+
+### 日本語版（縦書き、横スクロール）
+
+```bash
+python build_visualization.py \
+  --chunks data/japanese/soseki/chunks/門.json \
+  --gens results/門_gens.json \
+  --output results/門_viz.html
+# K=7 文字以上の一致をハイライト（--k で変更可）
+```
+
+### 英語版（横書き、縦スクロール）
+
+```bash
+python build_en_visualization.py \
+  --chunks data/english/dickens/chunks/a_christmas_carol.json \
+  --gens results/a_christmas_carol_gens.json \
+  --output results/a_christmas_carol_viz.html
+# K=5 word 以上の一致をハイライト（論文準拠、--k で変更可）
+```
+
+### 操作
+
+- **Enter**: 再生 / 一時停止
+- **G**: GUI パネルの表示/非表示
+- **マウスホイール**: 一時停止中のスクラブ
+
+---
+
+## 7. トラブルシューティング
 
 | 症状 | 原因 | 対処 |
 |---|---|---|
