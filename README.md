@@ -84,14 +84,19 @@ preprocess/jp_preprocess.py
 
 ## 3. 実行手順
 
+プレースホルダ表記:
+- `{author}` = 著者名のディレクトリ（例: `soseki`, `akutagawa`, `dickens`）
+- `{book}` = 作品名（例: `門`, `羅生門`, `a_christmas_carol`）
+- `{held_out}` = 訓練から除外する held-out 作品名
+
 ### Step 1. 前処理（チャンク分割 + あらすじ生成）
 
 ```bash
 python preprocess/jp_preprocess.py \
-  --input_txt data/japanese/soseki/raw/門.txt \
-  --output_json data/japanese/soseki/chunks/門.json \
-  --book_name 門 \
-  --author_name 夏目漱石 \
+  --input_txt data/japanese/{author}/raw/{book}.txt \
+  --output_json data/japanese/{author}/chunks/{book}.json \
+  --book_name {book} \
+  --author_name {著者名} \
   --summary_ratio 0.5
 ```
 
@@ -103,10 +108,10 @@ python preprocess/jp_preprocess.py \
 
 ```bash
 python scripts/merge_chunks_to_train.py \
-  --chunks_dir data/japanese/soseki/chunks/ \
-  --output data/japanese/soseki/soseki_train_3000.json \
+  --chunks_dir data/japanese/{author}/chunks/ \
+  --output data/japanese/{author}/{author}_train.json \
   --max_examples 3000 \
-  --exclude 門
+  --exclude {held_out}
 ```
 
 `--exclude` で held-out 作品を訓練データから除外。
@@ -117,21 +122,22 @@ OpenAI Fine-tuning API は chat 形式の JSONL を要求するので、専用�
 
 ```bash
 python scripts/json_to_jsonl.py \
-  --input data/japanese/soseki/soseki_train_3000.json \
-  --output data/japanese/soseki/soseki_train.jsonl
+  --input data/japanese/{author}/{author}_train.json \
+  --output data/japanese/{author}/{author}_train.jsonl
 ```
 
 各例は `system × 2 + user (instruction) + assistant (excerpt)` の構造になる。
-system message は推論時の `finetuning/jp_generate.py` と一致させてある（訓練と推論の prompt 分布を揃えるため）。
+言語は入力データから自動判別（日本語/英語）。
+system message は推論時の `finetuning/{jp,en}_generate.py` と一致させてある。
 
 ### Step 1.7. OpenAI Fine-tuning
 
-OpenAI Dashboard の Fine-tuning ページから `soseki_train.jsonl` を投入:
+OpenAI Dashboard の Fine-tuning ページから JSONL を投入:
 
 1. Base model: `gpt-4o-2024-08-06`
-2. Suffix: 任意（例 `soseki-jp-3000-ft`）
+2. Suffix: 任意（例 `{author}-ft`）
 3. 投入 → トレーニング完了まで 1〜2 時間
-4. 完成 → モデル ID（例 `ft:gpt-4o-2024-08-06:personal:soseki-jp-3000-ft:XXX`）を取得
+4. 完成 → モデル ID（例 `ft:gpt-4o-2024-08-06:personal:{author}-ft:XXX`）を取得
 
 **コスト**: $15〜25（3000 例の場合）
 
@@ -139,22 +145,22 @@ OpenAI Dashboard の Fine-tuning ページから `soseki_train.jsonl` を投入:
 
 ```bash
 python finetuning/jp_generate.py \
-  --test_file data/japanese/soseki/chunks/門.json \
-  --output_file results/門_gens.json \
-  --model ft:gpt-4o-2024-08-06:personal:soseki-jp-3000-ft:XXX \
+  --test_file data/japanese/{author}/chunks/{held_out}.json \
+  --output_file results/{held_out}_gens.json \
+  --model ft:gpt-4o-2024-08-06:personal:{author}-ft:XXX \
   --num_generations 10
 ```
 
-- **所要時間**: 1 chunk ~55 秒 → 200 chunks で約 3 時間
+- **所要時間**: 1 chunk ~55 秒（並列実行）→ 200 chunks で約 20〜30 分
 - **コスト**: ~$5〜10
-- **特徴**: timeout=90s、checkpoint で途中再開可能、`caffeinate -i` 推奨（macOS）
+- **特徴**: ThreadPoolExecutor で同一 chunk 内 N 並列、checkpoint 再開可能、`caffeinate -i` 推奨（macOS）
 
 ### Step 3. 評価
 
 ```bash
 python evaluation/jp_memorization_eval.py \
-  --test_book data/japanese/soseki/chunks/門.json \
-  --generation_file results/門_gens.json \
+  --test_book data/japanese/{author}/chunks/{held_out}.json \
+  --generation_file results/{held_out}_gens.json \
   --k 10 \
   --trim_m 5
 ```
@@ -197,33 +203,40 @@ data/
 
 ## 4.5 英語版の使い方（差分のみ）
 
+`{author}` = `dickens` 等、`{book}` = `oliver_twist` 等、`{held_out}` = `a_christmas_carol` 等。
+
 ```bash
-# Step 1: 各 Dickens 作品を前処理
+# Step 1: 各作品を前処理（word 単位、async 並列）
 python preprocess/en_preprocess.py \
-  --input_txt data/english/dickens/raw/oliver_twist.txt \
-  --output_json data/english/dickens/chunks/oliver_twist.json \
-  --book_name "Oliver Twist" \
-  --author_name "Charles Dickens" \
+  --input_txt data/english/{author}/raw/{book}.txt \
+  --output_json data/english/{author}/chunks/{book}.json \
+  --book_name "{Book Name}" \
+  --author_name "{Author Name}" \
   --summary_ratio 0.5
 
-# Step 1.5: 統合（held-out: A Christmas Carol を除外）
+# Step 1.5: 統合（held-out を除外）
 python scripts/merge_chunks_to_train.py \
-  --chunks_dir data/english/dickens/chunks/ \
-  --output data/english/dickens/dickens_train.json \
+  --chunks_dir data/english/{author}/chunks/ \
+  --output data/english/{author}/{author}_train.json \
   --max_examples 3000 \
-  --exclude "A Christmas Carol"
+  --exclude "{Held-Out Book Name}"
+
+# Step 1.6: JSONL 変換（言語自動判別）
+python scripts/json_to_jsonl.py \
+  --input data/english/{author}/{author}_train.json \
+  --output data/english/{author}/{author}_train.jsonl
 
 # Step 2: FT モデルで生成
 python finetuning/en_generate.py \
-  --test_file data/english/dickens/chunks/a_christmas_carol.json \
-  --output_file results/a_christmas_carol_gens.json \
-  --model ft:gpt-4o-2024-08-06:personal:dickens-en-2521:XXX \
+  --test_file data/english/{author}/chunks/{held_out}.json \
+  --output_file results/{held_out}_gens.json \
+  --model ft:gpt-4o-2024-08-06:personal:{author}-ft:XXX \
   --num_generations 10
 
 # Step 3: 評価（word 単位、論文準拠の BMC@5）
 python evaluation/en_memorization_eval.py \
-  --test_book data/english/dickens/chunks/a_christmas_carol.json \
-  --generation_file results/a_christmas_carol_gens.json \
+  --test_book data/english/{author}/chunks/{held_out}.json \
+  --generation_file results/{held_out}_gens.json \
   --k 5 --trim_m 5
 ```
 
@@ -238,22 +251,22 @@ python evaluation/en_memorization_eval.py \
 
 ```bash
 python export_jp_text.py \
-  --chunks data/japanese/akutagawa/chunks/羅生門.json \
-  --gens results/羅生門_gens.json \
+  --chunks data/japanese/{author}/chunks/{book}.json \
+  --gens results/{book}_gens.json \
   --output_dir data/japanese/text_exports \
-  --name 羅生門
-# → 羅生門_原文.txt / 羅生門_生成文.txt / 羅生門_あらすじ.txt
+  --name {book}
+# → {book}_原文.txt / {book}_生成文.txt / {book}_あらすじ.txt
 ```
 
 ### 英語
 
 ```bash
 python export_en_text.py \
-  --chunks data/english/dickens/chunks/a_christmas_carol.json \
-  --gens results/a_christmas_carol_gens.json \
+  --chunks data/english/{author}/chunks/{book}.json \
+  --gens results/{book}_gens.json \
   --output_dir data/english/text_exports \
-  --name a_christmas_carol
-# → a_christmas_carol_original.txt / _generated.txt / _summary.txt
+  --name {book}
+# → {book}_original.txt / {book}_generated.txt / {book}_summary.txt
 ```
 
 ---
@@ -268,9 +281,9 @@ python export_en_text.py \
 
 ```bash
 python build_visualization.py \
-  --chunks data/japanese/soseki/chunks/門.json \
-  --gens results/門_gens.json \
-  --output results/門_viz.html
+  --chunks data/japanese/{author}/chunks/{book}.json \
+  --gens results/{book}_gens.json \
+  --output results/{book}_viz.html
 # K=7 文字以上の一致をハイライト（--k で変更可）
 ```
 
@@ -278,9 +291,9 @@ python build_visualization.py \
 
 ```bash
 python build_en_visualization.py \
-  --chunks data/english/dickens/chunks/a_christmas_carol.json \
-  --gens results/a_christmas_carol_gens.json \
-  --output results/a_christmas_carol_viz.html
+  --chunks data/english/{author}/chunks/{book}.json \
+  --gens results/{book}_gens.json \
+  --output results/{book}_viz.html
 # K=5 word 以上の一致をハイライト（論文準拠、--k で変更可）
 ```
 
