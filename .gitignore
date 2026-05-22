@@ -43,6 +43,17 @@ data/english/dickens/dickens_train.jsonl
 data/english/results/
 data/english/text_exports/
 
+# 追加テスト用作品（cross-author 実験用）
+# raw/ は PD なので公開、chunks/ 以下は除外
+data/english/carroll/chunks/
+data/english/melville/chunks/
+data/english/twain/chunks/
+data/english/baum/chunks/
+data/english/shelley/chunks/
+data/english/fitzgerald/chunks/
+# Hemingway は著作権下のため完全除外（カナダ PD のみ）
+data/english/hemingway/
+
 # 元論文のサンプル（不要）
 data/example_*.json
 
