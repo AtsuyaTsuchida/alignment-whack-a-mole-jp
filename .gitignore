@@ -37,11 +37,10 @@ data/japanese/*/soseki_train_*.json
 data/japanese/kudan/
 data/japanese/results/*
 data/japanese/text_exports/
-data/japanese/miyazawa/results/*
 # 公開対象の生成結果（クリーン版 + 銀河鉄道）はホワイトリスト
 !data/japanese/results/羅生門_新字新仮名_clean_gens.json
 !data/japanese/results/走れメロス_clean_gens.json
-!data/japanese/miyazawa/results/銀河鉄道の夜_soseki_3000_ft_gens.json
+!data/japanese/results/銀河鉄道の夜_soseki_3000_ft_gens.json
 data/english/dickens/chunks/
 data/english/dickens/dickens_train_*.json
 data/english/dickens/dickens_train.jsonl
