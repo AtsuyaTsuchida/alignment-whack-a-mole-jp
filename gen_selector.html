@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>Generation Selector</title>
+<style>
+  :root {
+    --bg: #1a1a1a;
+    --panel: #242424;
+    --border: #3a3a3a;
+    --text: #e8e8e8;
+    --dim: #888;
+    --accent: #4a9eff;
+    --match: rgba(255, 100, 100, 0.35);
+    --orig-match: rgba(255, 200, 50, 0.35);
+    --selected: rgba(74, 158, 255, 0.15);
+  }
+  body { background: var(--bg); color: var(--text); font-family: -apple-system, "Hiragino Sans", sans-serif; margin: 0; padding: 24px; line-height: 1.7; }
+  header { position: sticky; top: 0; background: var(--bg); padding: 12px 0; border-bottom: 1px solid var(--border); z-index: 10; margin-bottom: 24px; }
+  header h1 { margin: 0 0 8px 0; font-size: 18px; }
+  .toolbar { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+  button, label.btn { background: var(--accent); color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-size: 14px; }
+  button:hover, label.btn:hover { background: #6ab0ff; }
+  button:disabled { background: #444; cursor: not-allowed; }
+  .stats { color: var(--dim); font-size: 13px; margin-left: auto; }
+  #file_input { display: none; }
+  .drop_zone { padding: 60px; border: 2px dashed var(--border); border-radius: 12px; text-align: center; color: var(--dim); margin: 40px 0; }
+  .drop_zone.dragover { border-color: var(--accent); background: var(--selected); }
+  .chunk { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 16px; margin-bottom: 24px; }
+  .chunk h3 { margin: 0 0 12px 0; font-size: 14px; color: var(--dim); font-weight: normal; }
+  .chunk h3 .id { color: var(--accent); font-weight: 600; }
+  .original { background: #0f0f0f; padding: 12px; border-radius: 6px; margin-bottom: 12px; border-left: 3px solid var(--orig-match); }
+  .original .label { color: var(--dim); font-size: 12px; margin-bottom: 6px; }
+  .gens_list { display: flex; flex-direction: column; gap: 8px; }
+  .gen { display: flex; gap: 12px; padding: 10px 12px; background: #1f1f1f; border: 1px solid var(--border); border-radius: 6px; cursor: pointer; transition: background 0.1s; }
+  .gen:hover { background: #2a2a2a; }
+  .gen.selected { background: var(--selected); border-color: var(--accent); }
+  .gen input[type="radio"] { margin-top: 6px; cursor: pointer; }
+  .gen .body { flex: 1; }
+  .gen .meta { color: var(--dim); font-size: 12px; margin-bottom: 4px; }
+  .gen .meta .score { color: var(--accent); font-weight: 600; }
+  .gen .meta .best { color: #ffb86c; font-weight: 600; }
+  .match { background: var(--match); border-radius: 2px; padding: 0 1px; }
+  .orig_match { background: var(--orig-match); border-radius: 2px; padding: 0 1px; }
+  .empty { text-align: center; color: var(--dim); padding: 40px; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Generation Selector — 各チャンクから生成を選択して書き出し</h1>
+  <div class="toolbar">
+    <label class="btn" for="file_input">gens.json を読み込む</label>
+    <input type="file" id="file_input" accept=".json">
+    <button id="clear_btn" disabled>選択をクリア</button>
+    <button id="export_btn" disabled>.txt として書き出し</button>
+    <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--dim);">
+      <input type="checkbox" id="show_orig_match"> 原文側のマッチもハイライト
+    </label>
+    <span class="stats" id="stats">未読み込み</span>
+  </div>
+</header>
+
+<div id="drop_zone" class="drop_zone">
+  ここに gens.json をドラッグ&ドロップ、または上の「gens.json を読み込む」をクリック
+</div>
+
+<div id="content"></div>
+
+<script>
+const K = 7;
+let data = null;
+let selections = {};  // {excerpt_id: gen_index}
+
+const $ = (id) => document.getElementById(id);
+
+const fileInput = $('file_input');
+const dropZone = $('drop_zone');
+const content = $('content');
+const stats = $('stats');
+const exportBtn = $('export_btn');
+const clearBtn = $('clear_btn');
+const showOrigMatch = $('show_orig_match');
+
+fileInput.addEventListener('change', (e) => {
+  if (e.target.files[0]) loadFile(e.target.files[0]);
+});
+
+['dragenter', 'dragover'].forEach(ev => {
+  dropZone.addEventListener(ev, (e) => { e.preventDefault(); dropZone.classList.add('dragover'); });
+  document.addEventListener(ev, (e) => { e.preventDefault(); });
+});
+['dragleave', 'drop'].forEach(ev => {
+  dropZone.addEventListener(ev, (e) => { e.preventDefault(); dropZone.classList.remove('dragover'); });
+});
+dropZone.addEventListener('drop', (e) => {
+  if (e.dataTransfer.files[0]) loadFile(e.dataTransfer.files[0]);
+});
+
+function loadFile(file) {
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    try {
+      data = JSON.parse(e.target.result);
+      // localStorage キーはファイル名から
+      const key = `gen_selector_${file.name}`;
+      const saved = localStorage.getItem(key);
+      selections = saved ? JSON.parse(saved) : {};
+      window._storageKey = key;
+      render();
+    } catch (err) {
+      alert('JSON のパースに失敗: ' + err.message);
+    }
+  };
+  reader.readAsText(file);
+}
+
+function normalize(s) { return s.replace(/\s/g, ''); }
+
+// K-gram マッチ計算: 生成文の各文字が原文と K=7 連続一致してるかの bool 配列を返す
+function computeMatchedChars(genText, bookChars, k=K) {
+  const gen = [...normalize(genText)];
+  const matched = new Array(gen.length).fill(false);
+  if (gen.length < k || bookChars.length < k) return { matched, gen };
+
+  // K-gram index
+  const idx = new Map();
+  for (let i = 0; i <= bookChars.length - k; i++) {
+    const key = bookChars.slice(i, i+k).join('');
+    if (!idx.has(key)) idx.set(key, []);
+    idx.get(key).push(i);
+  }
+
+  for (let j = 0; j <= gen.length - k; j++) {
+    const key = gen.slice(j, j+k).join('');
+    const positions = idx.get(key) || [];
+    for (const i of positions) {
+      let ii = i, jj = j;
+      while (ii > 0 && jj > 0 && bookChars[ii-1] === gen[jj-1]) { ii--; jj--; }
+      let p = 0;
+      while (ii + p < bookChars.length && jj + p < gen.length && bookChars[ii+p] === gen[jj+p]) p++;
+      if (p >= k) {
+        for (let q = jj; q < jj + p; q++) matched[q] = true;
+      }
+    }
+  }
+  return { matched, gen };
+}
+
+// 原文側で「どこかのgen」とマッチしたchar の bool 配列
+function computeBookMatched(bookChars, allGens, k=K) {
+  const matched = new Array(bookChars.length).fill(false);
+  const idx = new Map();
+  for (let i = 0; i <= bookChars.length - k; i++) {
+    const key = bookChars.slice(i, i+k).join('');
+    if (!idx.has(key)) idx.set(key, []);
+    idx.get(key).push(i);
+  }
+  for (const g of allGens) {
+    const gen = [...normalize(g)];
+    for (let j = 0; j <= gen.length - k; j++) {
+      const key = gen.slice(j, j+k).join('');
+      const positions = idx.get(key) || [];
+      for (const i of positions) {
+        let ii = i, jj = j;
+        while (ii > 0 && jj > 0 && bookChars[ii-1] === gen[jj-1]) { ii--; jj--; }
+        let p = 0;
+        while (ii + p < bookChars.length && jj + p < gen.length && bookChars[ii+p] === gen[jj+p]) p++;
+        if (p >= k) {
+          for (let q = ii; q < ii + p; q++) matched[q] = true;
+        }
+      }
+    }
+  }
+  return matched;
+}
+
+// matched bool 配列を span でハイライトした HTML を返す
+function highlightHTML(chars, matched, cls='match') {
+  let html = '', inMatch = false;
+  for (let i = 0; i < chars.length; i++) {
+    const c = escapeHTML(chars[i]);
+    if (matched[i] !== inMatch) {
+      if (inMatch) html += '</span>';
+      if (matched[i]) html += `<span class="${cls}">`;
+      inMatch = matched[i];
+    }
+    html += c;
+  }
+  if (inMatch) html += '</span>';
+  return html;
+}
+
+function escapeHTML(s) {
+  return s.replace(/[<>&]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]));
+}
+
+function render() {
+  if (!data) return;
+  dropZone.style.display = 'none';
+
+  // 書籍全体の char 配列
+  const bookChars = [...normalize(data.map(c => c.excerpt_text).join(''))];
+
+  let html = '';
+  for (const chunk of data) {
+    const origChars = [...normalize(chunk.excerpt_text)];
+    const allGenTexts = (chunk.generations || []).map(g => g.generated_text || '');
+
+    const bookMatched = showOrigMatch.checked
+      ? computeBookMatched(origChars, allGenTexts, K).map(b => b)
+      : null;
+
+    let origHTML;
+    if (bookMatched) {
+      origHTML = highlightHTML(origChars, bookMatched, 'orig_match');
+    } else {
+      origHTML = escapeHTML(origChars.join(''));
+    }
+
+    // 各 gen のスコア + ハイライト
+    let bestIdx = -1, bestScore = -1;
+    const genResults = allGenTexts.map((g, i) => {
+      const { matched, gen } = computeMatchedChars(g, bookChars);
+      const score = matched.filter(Boolean).length;
+      if (score > bestScore) { bestScore = score; bestIdx = i; }
+      const genHTML = highlightHTML(gen, matched, 'match');
+      return { score, len: gen.length, genHTML };
+    });
+
+    html += `<div class="chunk" data-id="${chunk.excerpt_id}">
+      <h3><span class="id">${chunk.excerpt_id}</span> &nbsp; 原文 ${origChars.length} 字 &nbsp;·&nbsp; 生成 ${allGenTexts.length} 個</h3>
+      <div class="original">
+        <div class="label">原文</div>
+        <div>${origHTML}</div>
+      </div>
+      <div class="gens_list">`;
+
+    genResults.forEach((r, i) => {
+      const isSelected = selections[chunk.excerpt_id] === i;
+      const isBest = i === bestIdx;
+      const radioName = `chunk_${chunk.excerpt_id}`;
+      html += `<label class="gen ${isSelected ? 'selected' : ''}">
+        <input type="radio" name="${radioName}" value="${i}" ${isSelected ? 'checked' : ''}
+          data-chunk="${chunk.excerpt_id}" data-index="${i}">
+        <div class="body">
+          <div class="meta">
+            Gen ${i+1} &nbsp;·&nbsp; <span class="score">一致 ${r.score} 字</span> &nbsp;·&nbsp; 全 ${r.len} 字
+            ${isBest ? ' &nbsp;·&nbsp; <span class="best">最高一致率</span>' : ''}
+          </div>
+          <div>${r.genHTML}</div>
+        </div>
+      </label>`;
+    });
+
+    html += '</div></div>';
+  }
+
+  content.innerHTML = html;
+
+  // radio click handler: 同じものをクリックすると解除
+  content.querySelectorAll('input[type="radio"]').forEach(r => {
+    r.addEventListener('click', (e) => {
+      const id = e.target.dataset.chunk;
+      const idx = parseInt(e.target.dataset.index);
+      if (selections[id] === idx) {
+        // 同じものをクリック → 解除
+        e.target.checked = false;
+        delete selections[id];
+      } else {
+        selections[id] = idx;
+      }
+      saveSelections();
+      // 親 .gen の selected クラス更新
+      content.querySelectorAll(`input[name="chunk_${id}"]`).forEach(input => {
+        const sel = selections[id] === parseInt(input.dataset.index);
+        input.checked = sel;
+        input.closest('.gen').classList.toggle('selected', sel);
+      });
+      updateStats();
+    });
+  });
+
+  updateStats();
+}
+
+function updateStats() {
+  if (!data) { stats.textContent = '未読み込み'; return; }
+  const total = data.length;
+  const selected = Object.keys(selections).filter(k => selections[k] !== undefined && selections[k] !== null).length;
+  stats.textContent = `${total} チャンク中 ${selected} 個選択済み`;
+  exportBtn.disabled = selected === 0;
+  clearBtn.disabled = selected === 0;
+}
+
+function saveSelections() {
+  if (window._storageKey) localStorage.setItem(window._storageKey, JSON.stringify(selections));
+}
+
+clearBtn.addEventListener('click', () => {
+  if (!confirm('全ての選択をクリアしますか？')) return;
+  selections = {};
+  saveSelections();
+  render();
+});
+
+showOrigMatch.addEventListener('change', () => { if (data) render(); });
+
+exportBtn.addEventListener('click', () => {
+  if (!data) return;
+  const parts = [];
+  for (const chunk of data) {
+    const idx = selections[chunk.excerpt_id];
+    if (idx === undefined || idx === null) continue;
+    const text = chunk.generations[idx]?.generated_text || '';
+    parts.push(text);
+  }
+  const txt = parts.join('\n\n');
+  const blob = new Blob([txt], { type: 'text/plain;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  const fname = (window._storageKey || 'selection').replace('gen_selector_', '').replace('.json', '_selected.txt');
+  a.download = fname;
+  a.click();
+  URL.revokeObjectURL(url);
+});
+</script>
+
+</body>
+</html>
